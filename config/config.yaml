@@ -1,0 +1,18 @@
+nbu_api_base: "https://bank.gov.ua/NBUStatService/v1/statdirectory"
+apikod_bs: ""
+bank_dimension_kod: ""
+default_lookback_days: 730
+
+kpi_sets:
+  core_bs1:
+    - "BS1_AssetsTotal"
+    - "BS1_LiabTotal"
+    - "BS1_CapitalTotal"
+    - "BS1_NetInterIncomeCosts"
+  core_bs2:
+    - "BS2_NetProfitLoss"
+
+structure:
+  top_n: 12
+  assets_prefix: "BS1_Assets"
+  liab_prefix: "BS1_Liab"
