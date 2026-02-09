@@ -1,14 +1,8 @@
 from __future__ import annotations
 
-# Fix for Streamlit Cloud: make `src/` importable
-import sys
-from pathlib import Path
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "kodex_nbu"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
 import datetime as dt
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -24,9 +18,13 @@ from kodex_nbu.analytics.formulas import formula_kpis
 from kodex_nbu.analytics.structure import structure_snapshot
 from kodex_nbu.heuristics import detect_bank_dimension, auto_structure_ids
 
-st.set_page_config(page_title="Kodex — NBU Bank Dashboard", layout="wide")
+ROOT = Path(__file__).resolve().parents[1]
 CFG = load_config(ROOT / "config" / "config.yaml")
 client = NBUOpenDataClient(base_url=CFG.nbu_api_base, use_cache=True)
+
+st.set_page_config(page_title="Bank Dashboard", layout="wide")
+st.title("Dashboard по вибору банку (NBU OpenData)")
+
 
 def yyyymmdd(d: dt.date) -> str:
     return d.strftime("%Y%m%d")
