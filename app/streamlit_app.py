@@ -1,24 +1,28 @@
 from __future__ import annotations
 
 import datetime as dt
+import sys
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from kodex_nbu.config import load_config
 from kodex_nbu.client import NBUOpenDataClient
 from kodex_nbu.catalog import datasets_to_df, search_datasets, parse_dimensions
 from kodex_nbu.normalize import normalize_records, filter_by_bank, filter_by_id_api
-from kodex_nbu.analytics.kpis import kpi_snapshot, kpi_timeseries
+from kodex_nbu.analytics.kpis import kpi_snapshot, kpi_timeseries, kpi_changes
 from kodex_nbu.analytics.quality import data_quality_report
 from kodex_nbu.analytics.peer import peer_table
 from kodex_nbu.analytics.formulas import formula_kpis
 from kodex_nbu.analytics.structure import structure_snapshot
 from kodex_nbu.heuristics import detect_bank_dimension, auto_structure_ids
 
-ROOT = Path(__file__).resolve().parents[1]
 CFG = load_config(ROOT / "config" / "config.yaml")
 client = NBUOpenDataClient(base_url=CFG.nbu_api_base, use_cache=True)
 
@@ -33,6 +37,11 @@ def default_start_end(lookback_days: int):
     today = dt.date.today()
     start = today - dt.timedelta(days=lookback_days)
     return start, today
+
+def format_number(value: float | int | None) -> str:
+    if value is None or pd.isna(value):
+        return "n/a"
+    return f"{value:,.0f}"
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def cached_list_datasets():
@@ -92,7 +101,11 @@ with tab_select:
             if bank_dim in r:
                 banks.append({"bank": str(r.get(bank_dim)), "txt": r.get("txt")})
     df_banks = pd.DataFrame(banks)
-    bank_value = st.selectbox("Bank", options=df_banks["bank"].tolist() if not df_banks.empty else [])
+    if df_banks.empty:
+        st.info("Немає значень банків для цього dimensionkod.")
+        bank_value = None
+    else:
+        bank_value = st.selectbox("Bank", options=df_banks["bank"].tolist())
 
     if apikod and bank_dim and bank_value:
         kpi_list = (CFG.kpi_sets.get("core_bs1", []) + CFG.kpi_sets.get("core_bs2", []))
@@ -140,6 +153,8 @@ with tab_profile:
         st.error("Немає значень для цього dimensionkod.")
         st.stop()
     bank_value = st.selectbox("Bank ", options=df_banks["bank"].tolist(), key="bank_p")
+    bank_txt = df_banks.loc[df_banks["bank"] == bank_value, "txt"].iloc[0]
+    st.caption(f"Selected bank: {bank_txt} ({bank_value})")
 
     params = {"start": yyyymmdd(start), "end": yyyymmdd(end)}
     if period:
@@ -162,11 +177,21 @@ with tab_profile:
     snap = kpi_snapshot(df_bank_kpi)
     asof = snap["dt"].iloc[0]
     st.caption(f"As of {asof.date()}")
+    highlight = snap.set_index("id_api")["value"].to_dict()
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("Assets", format_number(highlight.get("BS1_AssetsTotal")))
+    h2.metric("Liabilities", format_number(highlight.get("BS1_LiabTotal")))
+    h3.metric("Capital", format_number(highlight.get("BS1_CapitalTotal")))
+    h4.metric("Net Profit", format_number(highlight.get("BS2_NetProfitLoss")))
     st.dataframe(snap, use_container_width=True, height=220)
 
-    st.markdown("### C) Dynamics")
+    st.markdown("### C) Dynamics & Momentum")
     ts = kpi_timeseries(df_bank_kpi)
     st.plotly_chart(px.line(ts, x="dt", y="value", color="id_api"), use_container_width=True)
+    changes = kpi_changes(df_bank_kpi)
+    if not changes.empty:
+        st.markdown("#### Latest KPI changes")
+        st.dataframe(changes, use_container_width=True, height=220)
 
     st.markdown("### D) Formula KPIs")
     fk = formula_kpis(ts)
@@ -209,8 +234,10 @@ with tab_profile:
     if st.button("Export to Excel"):
         out_path = export_dir / f"bank_profile_{bank_value}_{yyyymmdd(end)}.xlsx"
         with pd.ExcelWriter(out_path, engine="openpyxl") as xw:
+            data_quality_report(df).to_excel(xw, sheet_name="data_quality", index=False)
             snap.to_excel(xw, sheet_name="kpi_snapshot", index=False)
             ts.to_excel(xw, sheet_name="kpi_timeseries", index=False)
+            changes.to_excel(xw, sheet_name="kpi_changes", index=False)
             fk.to_excel(xw, sheet_name="formula_kpis", index=False)
             assets_tbl.to_excel(xw, sheet_name="assets_structure", index=False)
             liab_tbl.to_excel(xw, sheet_name="liab_structure", index=False)
