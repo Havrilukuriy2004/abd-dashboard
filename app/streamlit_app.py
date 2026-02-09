@@ -8,7 +8,14 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-ROOT = Path(__file__).resolve().parents[1]
+def resolve_repo_root(start: Path) -> Path:
+    for parent in [start, *start.parents]:
+        if (parent / "config" / "config.yaml").exists():
+            return parent
+    return start.parent
+
+
+ROOT = resolve_repo_root(Path(__file__).resolve())
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
