@@ -22,3 +22,19 @@ def kpi_timeseries(df: pd.DataFrame) -> pd.DataFrame:
     ts = df.loc[:, ["dt", "id_api", "value"]].copy()
     ts = ts.groupby(["dt", "id_api"], as_index=False)["value"].sum()
     return ts.sort_values(["id_api", "dt"])
+
+
+def kpi_changes(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFrame:
+    """Computes latest-period deltas and growth by id_api."""
+    if df.empty:
+        return pd.DataFrame(columns=["dt", "id_api", "value"])
+    periods = periods or [1, 2, 4, 12]
+    ts = df.loc[:, ["dt", "id_api", "value"]].copy()
+    ts = ts.groupby(["dt", "id_api"], as_index=False)["value"].sum()
+    ts = ts.sort_values(["id_api", "dt"])
+    for p in periods:
+        ts[f"value_prev_{p}"] = ts.groupby("id_api")["value"].shift(p)
+        ts[f"delta_{p}"] = ts["value"] - ts[f"value_prev_{p}"]
+        ts[f"pct_{p}"] = (ts[f"delta_{p}"] / ts[f"value_prev_{p}"]) * 100.0
+    latest = ts.groupby("id_api", as_index=False).tail(1)
+    return latest.sort_values("id_api")

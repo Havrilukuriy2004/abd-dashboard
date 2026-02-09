@@ -10,6 +10,7 @@ class AppConfig:
     bank_dimension_kod: str
     default_lookback_days: int
     kpi_sets: dict
+    structure: dict
 
 def load_config(path: str | Path) -> AppConfig:
     path = Path(path)
@@ -20,4 +21,5 @@ def load_config(path: str | Path) -> AppConfig:
         bank_dimension_kod=cfg.get("bank_dimension_kod", "") or "",
         default_lookback_days=int(cfg.get("default_lookback_days", 730)),
         kpi_sets=cfg.get("kpi_sets", {}) or {},
+        structure=cfg.get("structure", {}) or {},
     )
